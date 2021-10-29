@@ -34,12 +34,14 @@ def get_folding_kinetics(pfdb, ci=0, X='L', Y='log_kf'):
         return linear_fit(Xf, Yf).params
 
 
-def get_folding_translation_rates(df, which='best', acpro=False, reduce_pfdb=True):
+def get_folding_translation_rates(df, which='best', acpro=False, reduce_pfdb=True, only2s=False):
     if acpro:
         pfdb = asym_io.load_acpro()
         reduce_pfdb = False
     else:
         pfdb = asym_io.load_pfdb()
+        if only2s:
+            pfdb = pfdb.loc[:88]
     if reduce_pfdb:
         pfdb = pfdb.loc[pfdb.use]
     if which == 'best':
@@ -48,8 +50,8 @@ def get_folding_translation_rates(df, which='best', acpro=False, reduce_pfdb=Tru
         idx = {'lo':1, 'hi':2}[which]
         coef = get_folding_kinetics(pfdb, ci=0.05)[idx]
 
-    df['ln_kf'] = df.AA.apply(lambda x: pred_fold(np.log10(x), coef))
-    df['T_TRANS'] = np.log10(df.AA / df.k_trans)
+    df['ln_kf'] = df.AA_PDB.apply(lambda x: pred_fold(np.log10(x), coef))
+    df['T_TRANS'] = np.log10(df.AA_PDB / df.k_trans)
     df['REL_RATE'] = - df['ln_kf'] - df['T_TRANS']
     return df
 
@@ -58,10 +60,10 @@ def kdb_results(pdb, dom, kdb):
     pdb = pdb.copy()
     dom = dom.copy()
     coef = linear_fit(np.log10(kdb['Protein Length']), kdb['ln kf']).params
-    pdb['ln_kf'] = pred_fold(np.log10(pdb.AA), coef)
+    pdb['ln_kf'] = pred_fold(np.log10(pdb.AA_PDB), coef)
     pdb = get_rel_rate(pdb)
 
-    dom['ln_kf'] = pred_fold(np.log10(dom.AA), coef)
+    dom['ln_kf'] = pred_fold(np.log10(dom.AA_PDB), coef)
     dom = get_rel_rate(dom)
 
     boot_R_and_save(pdb, kdb='_kdb')

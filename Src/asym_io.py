@@ -15,6 +15,7 @@ from goatools.obo_parser import GODag
 from multiprocessing import Pool
 import numpy as np
 import pandas as pd
+from scipy.spatial import distance_matrix
 
 PATH_BASE = Path("/data/Jmcbride/ProteinDB")
 
@@ -60,9 +61,10 @@ from extractPDB import extractPDB
 # Load data for figures
 def load_data_for_figures():
     pdb_all = pd.read_pickle(PATH_ASYM_DATA.joinpath("pdb_whole.pickle"))
-    pdb = pd.read_pickle('/home/protein/Protein/PDB/non_redundant.pickle')
-    dom = pd.read_pickle('/home/protein/Protein/PDB/non_redundant_domain.pickle')
-    pfdb = pd.read_pickle('')
+    pdb = pd.read_pickle(PATH_ASYM_DATA.joinpath("pdb_nonredundant.pickle"))
+    dom = pd.read_pickle(PATH_ASYM_DATA.joinpath("pdb_nonredundant_domain.pickle"))
+    pfdb = load_pfdb()
+    return pdb_all, pdb, dom, pfdb
 
 
 #---------------------------------------------------------#
@@ -71,6 +73,24 @@ def load_data_for_figures():
 # Load Gene Ontology graph
 def load_godag():
     return GODag(PATH_GO.joinpath('go-basic.obo'))
+
+
+def load_go_pdb():
+    path = PATH_SIFTS.joinpath("pdb_chain_go.csv")
+    path_pickle = PATH_SIFTS.joinpath("pdb_chain_go.pickle")
+    if path_pickle.exists():
+        go = pickle.load(open(path_pickle, 'rb'))
+    else:
+        go = defaultdict(list)
+        for l in open(path, 'r'):
+            try:
+                s = l.strip('\n').split(',')
+                pdb_chain = '_'.join([s[0].upper(), s[1]])
+                go[pdb_chain].append(s[-1])
+            except Exception as e:
+                print(l, e)
+        pickle.dump(go, open(path_pickle, 'wb'))
+    return go
 
 
 #---------------------------------------------------------#
@@ -246,6 +266,49 @@ def extract_chain(inputs, fresh=True):
 def extract_pdb_chains(df):
     with Pool(N_PROC) as pool:
         return list(pool.imap_unordered(extract_chain, zip(*df.loc[:, ['PDB', 'CHAIN']].values.T), 10))
+
+
+def load_pdb_all_config(pdb_id, cut=10):
+    pdb_id = pdb_id.lower()
+    path = PATH_PDB_PDB.joinpath(f"{pdb_id[1:3]}/pdb{pdb_id}.ent")
+    parser = PDBParser()
+    struct = parser.get_structure("_", path)
+    header = parser.get_header()
+
+    data = defaultdict(dict)
+    coords = defaultdict(list)
+    for i, d in header["compound"].items():
+        chain = d['chain'].upper()
+        for c in chain.replace(' ','').split(','):
+            data[c]['name'] = d['molecule']
+            data[c]['contacts'] = []
+
+
+    for chain in struct[0]:
+        chain_id = chain.id.upper()
+        ligands = []
+        for res in chain:
+            het = res.get_id()[0]
+            if het[0] not in ['W', ' ']:
+                ligands.append((het, [a.element for a in res]))
+            else:
+                for a in res:
+                    coords[chain_id].append(a.get_vector().get_array())
+
+        coords[chain_id] = np.array(coords[chain_id])
+        data[chain_id]['ligands'] = ligands
+        print(chain_id, len(coords[chain_id]))
+
+    chain_list = list(data.keys())
+    for i in range(len(chain_list)-1):
+        c1 = chain_list[i]
+        for j in range(i+1, len(chain_list)):
+            c2 = chain_list[j]
+            if np.any(distance_matrix(coords[c1], coords[c2]) < cut):
+                data[c1]['contacts'].append(c2)
+                data[c2]['contacts'].append(c1)
+
+    return data
 
 
 def load_pdb_chain_config(pdb_id, chain, imin, imax, save_idx=False):

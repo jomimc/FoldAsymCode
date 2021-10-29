@@ -14,6 +14,7 @@ import asym_io
 from asym_io import PATH_ASYM
 import asym_utils as utils
 import folding_rate
+import scop
 import structure
 
 N_PROC = 50
@@ -33,13 +34,16 @@ PATH_FIG_DATA = PATH_FIG.joinpath("Data")
 def run_all_bootstrapping(pdb, dom):
     boot_SS_asym_and_save(pdb)
     boot_R_and_save(pdb, acpro='')
-    bootstrapping.boot_enrich_and_save(pdb, dom)
-    pdb_CO_different_params(pdb)
+    boot_enrich_and_save(pdb, dom)
+#   pdb_CO_different_params(configs)
 
     dom_pos_boot(dom)
-    dom_ndom_boot(dom)
+#   dom_ndom_boot(dom)
     dom_smco_dist_boot(dom, aa=False)
     dom_smco_dist_boot(dom, aa=True)
+
+    boot_scop(pdb)
+    boot_ss_max_asym_region(pdb)
 
     run_bootstrap_fitting_params(pdb)
 
@@ -66,7 +70,8 @@ def print_important_statistics(pdb):
 ### Bootstrapping SS Asym (Fig 1)
 
 
-def pdb_ss_new_counter(df, cut=50, N=50, s1='SEQ_PDB2', s2='SS_PDB2', cat='.DSH'):
+def pdb_ss_new_counter(inputs, N=50, cut=0, s1='SEQ_PDB2', s2='SS_PDB2', cat='.DSH'):
+    df, N = inputs
     used = set()
     count_N = {x:np.zeros(N) for x in cat}
     count_C = {x:np.zeros(N) for x in cat}
@@ -82,9 +87,9 @@ def pdb_ss_new_counter(df, cut=50, N=50, s1='SEQ_PDB2', s2='SS_PDB2', cat='.DSH'
     return count_N, count_C, asym
 
 
-def generate_sample(df, replace=True, n_samp=1000):
+def generate_sample(df, N=50, replace=True, n_samp=1000):
     for i in range(n_samp):
-        yield df.sample(len(df), replace=replace)
+        yield (df.sample(len(df), replace=replace), N)
 
 
 def pdb_end_stats_bootstrap(df, n_boot=1000, N=50, cat='.DSH', ci=.95):
@@ -93,7 +98,7 @@ def pdb_end_stats_bootstrap(df, n_boot=1000, N=50, cat='.DSH', ci=.95):
     Cvals = {x:np.zeros((n_boot, N)) for x in cat}
     asym  = {x:np.zeros((n_boot, N)) for x in cat}
     with Pool(N_PROC) as pool:
-        for i, (n, c, a) in enumerate(pool.imap_unordered(pdb_ss_new_counter, generate_sample(df), 5)):
+        for i, (n, c, a) in enumerate(pool.imap_unordered(pdb_ss_new_counter, generate_sample(df, N=N), 5)):
             tot = np.mean([n[x] for x in cat], axis=0)
             for x in cat:
                 Nvals[x][i] = n[x] / (tot*2)
@@ -187,7 +192,13 @@ def boot_enrich_and_save(pdb, dom, acpro=''):
     file_names = [f"fig3_enrich{acpro}.pickle"] + \
                  [f"fig3_enrich_{a}{acpro}.pickle" for a in ['eukaryote', 'prokaryote']] + \
                  [f"fig4_enrich_{a}{acpro}.pickle" for a in ['single', 'multi']]
-    q_arr = [0, 1, 1, 0, 0]
+    if len(acpro):
+        qu = np.array([-6.3, -3.0, -2.7, -2.4, -2.1, -1.8, -1.7, -1.5, -1.2, -1.0,  1.7])
+    else:
+        qu = np.array([-8.0, -2.6, -1.9, -1.4, -1.0, -0.6, -0.3,  0.0,  0.4,  0.9,  5.6])
+
+    q_arr = [0, qu, qu, 0, 0]
+
     for df, f, q in zip(df_list, file_names, q_arr):
         edges, vals = bootstrap_enrichment(df, q=q)
         out_dict = {'edges':edges, 'H':vals[:,0,:], 'S':vals[:,1,:]}
@@ -292,10 +303,10 @@ def generate_fit_inputs(pdb, l, coef_a, coef_b):
 
 
 def map_regression_space(pdb, pfdb, ci=0.01, ngrid=3):
-    pdb = pdb.copy().loc[:, ["AA", "CO", "REL_RATE", "ln_kf", "k_trans", "H_ASYM", "S_ASYM"]]
+    pdb = pdb.copy().loc[:, ["AA_PDB", "CO", "REL_RATE", "ln_kf", "k_trans", "H_ASYM", "S_ASYM"]]
     Xf_in = [np.log10(pfdb.loc[pfdb.use, s]) for s in ['L']]
     Y = pfdb.loc[pfdb.use, 'log_kf'].values
-    lbls = ["AA"]
+    lbls = ["AA_PDB"]
     if len(lbls) > 1:
         x_arr = pfdb.loc[pfdb.use, lbls]
     else:
@@ -379,6 +390,68 @@ def pdb_CO_different_params(config_list_trimmed):
     pdb_CO = np.array(res).reshape(len(config_list_trimmed), 4, 3)
     np.save(PATH_FIG_DATA.joinpath("pdb_config_CO.npy"), pdb_CO)
     return pdb_CO
+
+
+#---------------------------------------------------------#
+# SCOP fold independent
+
+
+def run_scop_analysis(pdb, N=50, cat='SH.D'):
+    Nvals = {x:np.zeros(N) for x in cat}
+    Cvals = {x:np.zeros(N) for x in cat}
+    asym  = {x:np.zeros(N) for x in cat}
+    countN, countC, a = pdb_ss_new_counter(pdb)
+    tot = np.mean([countN[x] for x in cat], axis=0) 
+    for x in cat:
+        Nvals[x] = countN[x] / tot
+        Cvals[x] = countC[x] / tot
+        asym[x] = a[x]
+
+    enrich_edges, enrich_vals = utils.calculate_enrichment((pdb, False))
+    return Nvals, Cvals, asym, enrich_edges, enrich_vals
+
+
+def generate_scop_params(pdb, key, n_rep=1000):
+    for i in range(n_rep):
+        idx = [np.random.choice(v) for v in key.values()]
+        yield pdb.loc[idx]
+
+
+def boot_scop(pdb, ci=0.95, N=50, cat='SH.D'):
+    key = scop.get_SCOP_redundant_key(pdb)
+    with Pool(N_PROC) as pool:
+        res = list(pool.imap_unordered(run_scop_analysis, generate_scop_params(pdb, key), 10))
+
+    Nvals = {x: np.array([r[0][x] for r in res]) for x in cat}
+    Cvals = {x: np.array([r[1][x] for r in res]) for x in cat}
+    asym  = {x: np.array([r[2][x] for r in res]) for x in cat}
+    enrich_edges = np.array([r[3] for r in res])
+    enrich_vals  = np.array([r[4] for r in res])
+
+    Nboot = {x:{} for x in cat}
+    Cboot = {x:{} for x in cat}
+    asymB = {x:{} for x in cat}
+    for x in cat:
+        Nboot[x]['lo'] = np.array([np.quantile(Nvals[x][:,i], (1-ci)/2.) for i in range(N)])
+        Nboot[x]['hi'] = np.array([np.quantile(Nvals[x][:,i], 1 - (1-ci)/2.) for i in range(N)])
+        Nboot[x]['mean'] = np.array([np.mean(Nvals[x][:,i]) for i in range(N)])
+        Cboot[x]['lo'] = np.array([np.quantile(Cvals[x][:,i], (1-ci)/2.) for i in range(N)])
+        Cboot[x]['hi'] = np.array([np.quantile(Cvals[x][:,i], 1 - (1-ci)/2.) for i in range(N)])
+        Cboot[x]['mean'] = np.array([np.mean(Cvals[x][:,i]) for i in range(N)])
+        asymB[x]['lo'] = np.array([np.quantile(asym[x][:,i], (1-ci)/2.) for i in range(N)])
+        asymB[x]['hi'] = np.array([np.quantile(asym[x][:,i], 1 - (1-ci)/2.) for i in range(N)])
+        asymB[x]['mean'] = np.array([np.mean(asym[x][:,i]) for i in range(N)])
+
+    out = [Nboot, Cboot, asymB, enrich_edges, enrich_vals] 
+    pickle.dump(out, open(PATH_FIG_DATA.joinpath(f"pdb_scop_indep.pickle"), 'wb'))
+
+    return out
+
+
+def boot_ss_max_asym_region(pdb, ci=0.95, N=50, cat='SH.D'):
+    idx = (pdb.AA_PDB>=179)&(pdb.AA_PDB<=416)&(pdb.CO>=21)&(pdb.CO<=35)
+    SS_asym = pdb_end_stats_bootstrap(pdb.loc[idx], N=100)
+    pickle.dump(SS_asym, open(PATH_FIG_DATA.joinpath(f"pdb_ss_max_asym.pickle"), 'wb'))
 
 
 

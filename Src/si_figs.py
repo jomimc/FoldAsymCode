@@ -31,7 +31,7 @@ import asym_io
 from asym_io import PATH_BASE, PATH_ASYM, PATH_ASYM_DATA
 import asym_utils as utils
 import folding_rate
-import new_figs
+import paper_figs
 import structure
 
 PATH_FIG = PATH_ASYM.joinpath("Figures")
@@ -61,7 +61,7 @@ def fig1(df, nx=3, ny=3, N=50):
     scop_desc = {row[1]:row[2] for row in pd.read_csv(PATH_BASE.joinpath('SCOP/scop-des-latest.txt')).itertuples()}
     CF_count = sorted(df.CF.value_counts().items(), key=lambda x:x[1], reverse=True)[1:]
 
-    bold_idx = [0, 1, 2, 7]
+    bold_idx = [0, 1, 2, 6, 8]
 
     for i in range(nx*ny):
         cf_id, count = CF_count[i]
@@ -109,8 +109,8 @@ def fig2():
 
     ax[0].set_ylabel(r'$\log_{10} k_f$')
     ax[1].set_ylabel(r'$\log_{10} k_f$')
-    ax[0].set_xlabel('Sequence Length')
-    ax[1].set_xlabel('Contact Order')
+    ax[0].set_xlabel(r'$\log_{10}$ Sequence Length')
+    ax[1].set_xlabel(r'$\log_{10}$ Contact Order')
 
     fs = 14
     for i, b in zip([0,1], list('ABCDEFGHI')):
@@ -134,9 +134,14 @@ def fig3(pdb, Y='S_ASYM'):
         print(f"{i}:  frac R less than 0 = {utils.R_frac_1(d)}")
         print(f"{i}:  Euk frac (.1 < R < 10) = {utils.R_frac_2(d, k=5)}")
         print(f"{i}:  Prok frac (.1 < R < 10) = {utils.R_frac_2(d, k=10)}")
+        print(f"{i}:  frac R faster than 'speed-limit' = {utils.R_frac_3(d)}")
+        print(f"{i}:  frac R slower than 20 minutes = {utils.R_frac_4(d)}")
+        print()
         sns.distplot(d['REL_RATE'], label=lbls[i], color=col[i])
     ax.legend(loc='best', frameon=False)
     ax.set_xlim(-6, 6)
+    ax.set_xlabel(r'$\log_{10}R$')
+    ax.set_ylabel('Density')
 
     fig.savefig(PATH_FIG.joinpath("si3.pdf"), bbox_inches='tight')
 
@@ -148,10 +153,12 @@ def fig3(pdb, Y='S_ASYM'):
 def fig4(pdb, Y='S_ASYM'):
     LO = folding_rate.get_folding_translation_rates(pdb.copy(), which='lo')
     HI = folding_rate.get_folding_translation_rates(pdb.copy(), which='hi')
+    # For the results using only 2-state proteins... 
+#   HI = folding_rate.get_folding_translation_rates(pdb.copy(), which='best', only2s=True)
     fig = plt.figure(figsize=(8,10.5))
-    gs  = GridSpec(5,9, wspace=0.5, hspace=0.0, height_ratios=[1,0.5,1,0.5,1.5])
-    ax = [fig.add_subplot(gs[i*2,j*3:(j+1)*3]) for i in [0,1] for j in [0,1,2]] + \
-         [fig.add_subplot(gs[4,:4]), fig.add_subplot(gs[4,5:])]
+    gs  = GridSpec(5,12, wspace=0.5, hspace=0.0, height_ratios=[1,0.5,1,0.5,1.5])
+    ax = [fig.add_subplot(gs[i*2,j*4:(j+1)*4]) for i in [0,1] for j in [0,1,2]] + \
+         [fig.add_subplot(gs[4,:5]), fig.add_subplot(gs[4,7:])]
 
     X = np.arange(10)
     width = .35
@@ -250,7 +257,8 @@ def plot_metric_space(fig, ax):
     ttls = ['Helices', 'Sheets']
     for i in range(2):
         im = ax[i].contourf(X, Y, fit['met'][:,:,i], bounds, cmap=cmap, vmin=-2, vmax=2, norm=norm)
-        fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04, norm=norm, boundaries=bounds, ticks=bounds)
+        cbar = fig.colorbar(im, ax=ax[i], fraction=0.046, pad=0.04, norm=norm, boundaries=bounds, ticks=bounds)
+        cbar.set_label(r"$R_{\mathregular{max}}$", labelpad=-5)
         ax[i].set_xlabel('A')
         ax[i].set_xlim(X.min(), X.max())
         ax[i].set_ylabel('B')
@@ -356,7 +364,7 @@ def fig7(pdb, Y='D_ASYM'):
     xlbls = [r'$\log_{10} R$', 'Sequence Length', 'Contact Order']
     ttls = ['Full sample', 'Eukaryotes', 'Prokaryotes']
     for k, df in enumerate([pdb, pdb.loc[pdb.k_trans==5], pdb.loc[pdb.k_trans==10]]):
-        for i, X in enumerate(['REL_RATE', 'AA', 'CO']):
+        for i, X in enumerate(['REL_RATE', 'AA_PDB', 'CO']):
             quantiles = df[X].quantile(np.arange(0,1.1,.1)).values
             df['quant'] = df[X].apply(lambda x: utils.assign_quantile(x, quantiles))
             ratio = []
@@ -471,18 +479,18 @@ def fig9(pdb, s='S'):
          [fig.add_subplot(gs[j,i]) for i in range(3) for j in [3,4]]
 
     print("All proteins, all SS")
-    fig8a(pdb['RSA'], pdb['SS_PDB2'], quantiles, ax[:2], s='SH.D')
+    fig9a(pdb['RSA'], pdb['SS_PDB2'], quantiles, ax[:2], s='SH.D')
     print("euk proteins, all ss")
-    fig8a(pdb.loc[pdb.k_trans==5, 'RSA'], pdb.loc[pdb.k_trans==5, 'SS_PDB2'], euk_quantiles, ax[2:4], s='SH.D')
+    fig9a(pdb.loc[pdb.k_trans==5, 'RSA'], pdb.loc[pdb.k_trans==5, 'SS_PDB2'], euk_quantiles, ax[2:4], s='SH.D')
     print("Prok proteins, all SS")
-    fig8a(pdb.loc[pdb.k_trans==10, 'RSA'], pdb.loc[pdb.k_trans==10, 'SS_PDB2'], prok_quantiles, ax[4:6], s='SH.D')
+    fig9a(pdb.loc[pdb.k_trans==10, 'RSA'], pdb.loc[pdb.k_trans==10, 'SS_PDB2'], prok_quantiles, ax[4:6], s='SH.D')
  
     print("Euk proteins, only SHC")
-    fig8a(pdb.loc[pdb.k_trans==5, 'RSA'], pdb.loc[pdb.k_trans==5, 'SS_PDB2'], euk_quantiles, ax[6:8], s='SH.')
+    fig9a(pdb.loc[pdb.k_trans==5, 'RSA'], pdb.loc[pdb.k_trans==5, 'SS_PDB2'], euk_quantiles, ax[6:8], s='SH.')
     print("Euk proteins, only S")
-    fig8a(pdb.loc[pdb.k_trans==5, 'RSA'], pdb.loc[pdb.k_trans==5, 'SS_PDB2'], euk_quantiles, ax[8:10], s='S')
+    fig9a(pdb.loc[pdb.k_trans==5, 'RSA'], pdb.loc[pdb.k_trans==5, 'SS_PDB2'], euk_quantiles, ax[8:10], s='S')
     print("Prok proteins, only S")
-    fig8a(pdb.loc[pdb.k_trans==10, 'RSA'], pdb.loc[pdb.k_trans==10, 'SS_PDB2'], prok_quantiles, ax[10:12], s='S')
+    fig9a(pdb.loc[pdb.k_trans==10, 'RSA'], pdb.loc[pdb.k_trans==10, 'SS_PDB2'], prok_quantiles, ax[10:12], s='S')
 
 
     ttls = ['All proteins\nAll residues', 'Eukaryotic proteins\nAll residues', 'Prokaryotic proteins\nAll residues',
@@ -550,7 +558,7 @@ def fig10(pdb):
 
     pdb = pdb.copy()
     coef = folding_rate.linear_fit(np.log10(acpro['L']), acpro['log_kf']).params
-    pdb['ln_kf'] = folding_rate.pred_fold(np.log10(pdb.AA), coef)
+    pdb['ln_kf'] = folding_rate.pred_fold(np.log10(pdb.AA_PDB), coef)
     pdb = utils.get_rel_rate(pdb)
 
     fig10a(fig, ax[4])
@@ -710,7 +718,7 @@ def fig10b(fig, ax, pdb, Y='S_ASYM'):
 ### FIG 11
 
 
-def fig11(pdb, X='AA', Y='CO', w=.1, ax='', fig=''):
+def fig11(pdb, X='AA_PDB', Y='CO', w=.1, ax='', fig=''):
     if isinstance(ax, str):
         fig, ax = plt.subplots(4,2, figsize=(9,12))
         fig.subplots_adjust(wspace=0.0, hspace=0.65)
@@ -721,8 +729,9 @@ def fig11(pdb, X='AA', Y='CO', w=.1, ax='', fig=''):
     df = pdb.copy()
     q = np.arange(w,1+w,w)
     lbls = ['Helix', 'Sheet']
-    cb_lbl = [r"$E_{\alpha}$", r"$E_{\beta}$"]
-    vmax = 0.50
+#   cb_lbl = [r"$E_{\alpha}$", r"$E_{\beta}$"]
+    cb_lbl = [r"$asym_{\alpha}$", r"$asym_{\beta}$"]
+    vmax = 0.03
     vmin = -vmax
 
     for j, co in enumerate(pdb_CO.T):
@@ -733,12 +742,12 @@ def fig11(pdb, X='AA', Y='CO', w=.1, ax='', fig=''):
             mean = []
             for l1, h1 in zip(quant1[:-1], quant1[1:]):
                 for l2, h2 in zip(quant2[:-1], quant2[1:]):
-#                   samp = df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2), Z]
-#                   mean.append(samp.mean())
-                    left  = len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)&(df[Z]<0)])
-                    right = len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)&(df[Z]>0)])
-                    tot = max(len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)]), 1)
-                    mean.append((right - left)/tot)
+                    samp = df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2), Z]
+                    mean.append(samp.mean())
+#                   left  = len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)&(df[Z]<0)])
+#                   right = len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)&(df[Z]>0)])
+#                   tot = max(len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)]), 1)
+#                   mean.append((right - left)/tot)
 
             cmap = sns.diverging_palette(230, 22, s=100, l=47, as_cmap=True)
             norm = colors.BoundaryNorm([vmin, vmax], cmap.N)
@@ -767,6 +776,476 @@ def fig11(pdb, X='AA', Y='CO', w=.1, ax='', fig=''):
 
 
 
+def fig12(pdb, X='REL_RATE', Y='S_ASYM', w=0.1):
+    fig = plt.figure(figsize=(8,12))
+    gs  = GridSpec(3,2, wspace=0.4, hspace=0.5, width_ratios=[1,1])
+    ax_all = [[fig.add_subplot(gs[j,i]) for i in [0,1]] for j in range(3)]
 
+    custom_cmap = sns.diverging_palette(230, 22, s=100, l=47, n=13)
+    c_helix = custom_cmap[2]
+    c_sheet = custom_cmap[10]
+    col = [c_helix, c_sheet]
+
+    bins = np.linspace(-0.20, 0.20, 80)
+    width = np.diff(bins[:2])
+    mid = 39
+    sep = 0.05
+    lbls = ['Sheet', 'Helix']
+    quantiles = pdb[X].quantile(np.arange(0,1+w,w)).values
+#   print(np.round(quantiles, 2))
+    pdb['quant'] = pdb[X].apply(lambda x: utils.assign_quantile(x, quantiles))
+#   pdb['quant'] = np.random.choice(pdb['quant'], len(pdb), replace=False)
+    for ax, threshold in zip(ax_all, [0, 0.025, 0.05]):
+        print(f"threshold = {threshold}")
+        for i, Y in enumerate(['S_ASYM', 'H_ASYM']):
+            ratio1 = []
+            ratio2 = []
+            lefts = []
+            rights = []
+            for j in range(len(quantiles)-1):
+                hist, bins = np.histogram(pdb.loc[pdb.quant==j, Y], bins=bins)
+                hist = hist / hist.sum()
+                left  = len(pdb.loc[(pdb.quant==j)&(pdb[Y]<-threshold)]) / max(len(pdb.loc[(pdb.quant==j)]), 1)
+                right = len(pdb.loc[(pdb.quant==j)&(pdb[Y]>threshold)]) / max(len(pdb.loc[(pdb.quant==j)]), 1)
+                lefts.append(left)
+                rights.append(right)
+                ratio1.append((right - left))
+                ratio2.append(np.log2(right / left))
+                print(Y, j, left, right)
+                xgrid = [sep*j+(i+1.0)*sep/3 for j in range(len(quantiles)-1)]
+            ax[0].barh(xgrid, ratio1, sep/3, color=col[i], alpha=.5)
+            ax[1].barh(xgrid, ratio2, sep/3, color=col[i], alpha=.5)
+            ax[0].set_xticks(np.arange(-0.3, 0.4, 0.1))
+
+        for a in ax:
+            a.set_yticks(np.arange(len(quantiles))*sep)
+            a.set_yticklabels([round(x,1) for x in quantiles])
+
+            a.plot([0,0], [-0.05, 0.5], '-', c='k', lw=.1)
+            a.spines['top'].set_visible(False)
+            a.spines['right'].set_visible(False)
+            a.set_ylim(0, 0.5)
+
+            a.set_ylabel(r'$\log_{10}R$')
+
+        ax[0].set_xlim(-0.35, 0.35)
+        ax[1].set_xlim(-1.50, 1.50)
+
+        ax[0].set_xlabel(r'$P(\mathregular{{asym}} \geq {0}) - P(\mathregular{{asym}} \leq -{0})$'.format(*[threshold]*2))
+        ax[1].set_xlabel(r'$\log_{{2}} \frac{{P(\mathregular{{asym}} \geq {0})}}{{P(\mathregular{{asym}} \leq -{0})}} $'.format(*[threshold]*2))
+
+    fig.savefig(PATH_FIG.joinpath("si12.pdf"), bbox_inches='tight')
+
+
+def fig13(df, X='AA_PDB', Y='CO', w=.1, ax='', fig=''):
+    if isinstance(ax, str):
+        fig, ax = plt.subplots(1,3, figsize=(15,4))
+        fig.subplots_adjust(wspace=0.5)
+    
+    q = np.arange(w,1+w,w)
+    quant1 = [df[X].min()] + list(df[X].quantile(q).values)
+    quant2 = [df[Y].min()] + list(df[Y].quantile(q).values)
+    lbls = ['Helix', 'Sheet']
+    cb_lbl = [r"$asym_{\alpha}$", r"$asym_{\beta}$"]
+    vmax = 0.03
+    vmin = -vmax
+
+    count = []
+
+    for i, Z in enumerate(['H_ASYM', 'S_ASYM']):
+        mean = []
+        for l1, h1 in zip(quant1[:-1], quant1[1:]):
+            for l2, h2 in zip(quant2[:-1], quant2[1:]):
+                samp = df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2), Z]
+                mean.append(samp.mean())
+#               left  = len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)&(df[Z]<0)])
+#               right = len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)&(df[Z]>0)])
+#               tot = max(len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)]), 1)
+#               mean.append((right - left)/tot)
+                if not i:
+                    count.append(len(samp))
+#                   print(len(samp))
+        mean = np.array(mean).reshape(q.size, q.size)
+        count = np.array(count).reshape(q.size, q.size)
+
+        cmap = sns.diverging_palette(230, 22, s=100, l=47, as_cmap=True)
+        norm = colors.BoundaryNorm([vmin, vmax], cmap.N)
+        bounds = np.linspace(vmin, vmax, 3)
+        im = ax[i].imshow(mean.T, cmap=cmap, vmin=vmin, vmax=vmax)
+        cbar = fig.colorbar(im, cmap=cmap, ticks=bounds, ax=ax[i], fraction=0.046, pad=0.04)
+
+        cbar.set_label(cb_lbl[i], labelpad=-5)
+        ax[i].set_title(lbls[i])
+        ax[i].set_xticks(np.arange(q.size+1)-0.5)
+        ax[i].set_yticks(np.arange(q.size+1)-0.5)
+        ax[i].set_xticklabels([int(x) for x in quant1], rotation=90)
+        ax[i].set_yticklabels([int(round(x,0)) for x in quant2])
+
+    for i in [2]:
+        cmap = plt.cm.Greys
+#       norm = colors.BoundaryNorm([-.04, .04], cmap.N)
+#       bounds = np.linspace(-.04, .04, 5)
+        im = ax[i].imshow(np.array(count).reshape(q.size, q.size).T, cmap=cmap, vmin=0)
+        cbar = fig.colorbar(im, cmap=cmap, ax=ax[i], fraction=0.046, pad=0.04)
+
+        cbar.set_label('Count')
+        ax[i].set_title('Distribution')
+        ax[i].set_xticks(np.arange(q.size+1)-0.5)
+        ax[i].set_yticks(np.arange(q.size+1)-0.5)
+        ax[i].set_xticklabels([int(x) for x in quant1], rotation=90)
+        ax[i].set_yticklabels([int(round(x,0)) for x in quant2])
+
+    for a in ax:
+        a.invert_yaxis()
+        a.set_xlabel('Sequence Length')
+        a.set_ylabel('Contact Order')
+        a.tick_params(axis='both', which='major', direction='in')
+
+    fs = 14
+    for i, b in zip([0,1,2], list('ABCDEFGHI')):
+        ax[i].text( -0.20, 1.05, b, transform=ax[i].transAxes, fontsize=fs)
+
+    fig.savefig(PATH_FIG.joinpath("si13.pdf"), bbox_inches='tight')
+
+
+def scop_ss():
+    fig, ax = plt.subplots(2,1)
+    cat = 'HS.D'
+    N = 50
+    X = np.arange(50)
+    Nboot, Cboot, asym, enrich_edges, enrich_vals = pickle.load(open(PATH_FIG_DATA.joinpath(f"pdb_scop_indep.pickle"), 'rb'))
+    data = [Nboot, Cboot, asym]
+    custom_cmap = sns.diverging_palette(230, 22, s=100, l=47, n=13)
+    c_helix = custom_cmap[2]
+    c_sheet = custom_cmap[10]
+    col = [c_helix, c_sheet, "#CB7CE6", "#79C726"]
+    lbls = ['Helix', 'Sheet', 'Coil', 'Disorder']
+
+    for j, s in enumerate(cat):
+        ax[0].plot(X, data[0][s]['mean']/4, '-', c=col[j], label=f"{s} N")
+        ax[0].fill_between(X, data[0][s]['hi']/4, data[0][s]['lo']/4, color="grey", label=f"{s} N", alpha=0.5)
+
+        ax[0].plot(X, data[1][s]['mean']/4, '--', c=col[j], label=f"{s} N")
+        ax[0].fill_between(X, data[1][s]['hi']/4, data[1][s]['lo']/4, color="grey", label=f"{s} N", alpha=0.2)
+
+        print(s, round(np.mean(data[2][s]['mean']), 2), round(np.mean(data[2][s]['mean'][:20]), 2), round(np.mean(data[2][s]['mean'][20:]), 2))
+
+        ax[1].plot(X, np.log2(data[2][s]['mean']), '-', c=col[j], label=lbls[j])
+        ax[1].fill_between(X, np.log2(data[2][s]['hi']), np.log2(data[2][s]['lo']), color="grey", label=f"{s} N", alpha=0.2)
+
+    ax[1].set_ylim(-1, 1.3)
+    ax[1].plot([0]*50, '-', c='k')
+    ax[1].set_yticks(np.arange(-1,1.5,0.5))
+    ax[0].set_ylim(0, 0.6)
+
+    ax[1].set_xlabel('Sequence distance from ends')
+    ax[0].set_ylabel('Secondary structure\nprobability')
+    ax[1].set_ylabel('Structural asymmetry\n$\\log_2 (N / C)$')
+
+
+    fs = 14
+    for i, b in zip([0,1], list('ABCDEFGHI')):
+        ax[i].text( -0.10, 1.05, b, transform=ax[i].transAxes, fontsize=fs)
+    fig.savefig(PATH_FIG.joinpath("si14.pdf"), bbox_inches='tight')
+
+
+def percentage_asym(x):
+    return np.sign(x) * 100*2**(abs(x)) - np.sign(x) * 100
+
+
+def fig15():
+    fig, ax = plt.subplots(3,1, figsize=(10,10))
+    cat = 'HS.D'
+    N = 100
+    X = np.arange(N)
+    Nboot, Cboot, asym, = pickle.load(open(PATH_FIG_DATA.joinpath(f"pdb_ss_max_asym.pickle"), 'rb'))
+    data = [Nboot, Cboot, asym]
+    custom_cmap = sns.diverging_palette(230, 22, s=100, l=47, n=13)
+    c_helix = custom_cmap[2]
+    c_sheet = custom_cmap[10]
+    col = [c_helix, c_sheet, "#CB7CE6", "#79C726"]
+    lbls = ['Helix', 'Sheet', 'Coil', 'Disorder']
+    X2 = np.arange(5)
+
+    for j, s in enumerate(cat):
+        ax[0].plot(X, data[0][s]['mean']/2, '-', c=col[j], label=f"{s} N")
+        ax[0].fill_between(X, data[0][s]['hi']/2, data[0][s]['lo']/2, color="grey", label=f"{s} N", alpha=0.5)
+
+        ax[0].plot(X, data[1][s]['mean']/2, '--', c=col[j], label=f"{s} N")
+        ax[0].fill_between(X, data[1][s]['hi']/2, data[1][s]['lo']/2, color="grey", label=f"{s} N", alpha=0.2)
+
+        for k in range(5):
+            print(s, round(np.mean(data[2][s]['mean']), 2), round(np.mean(data[2][s]['mean'][k*20:(k+1)*20]), 2))
+
+        ax[1].plot(X, np.log2(data[2][s]['mean']), '-', c=col[j], label=lbls[j])
+        ax[1].fill_between(X, np.log2(data[2][s]['hi']), np.log2(data[2][s]['lo']), color="grey", label=f"{s} N", alpha=0.2)
+
+        if s in 'HS':
+            Y2 = [percentage_asym(np.log2(data[2][s]['mean'])[k*20:(k+1)*20].mean()) for k in range(5)]
+            ax[2].bar(X2, Y2, 0.5, color=col[j], label=lbls[j], ec='k')
+
+    ax[1].set_ylim(-1.5, 2.0)
+    ax[1].plot([0]*100, '-', c='k')
+    ax[2].plot([0]*5, '-', c='k')
+    ax[1].set_yticks(np.arange(-1,2.5,0.5))
+    ax[0].set_ylim(0, 0.6)
+    ax[2].set_xticks(np.arange(5))
+    ax[2].set_xticklabels([f"{i*20} - {(i+1)*20}" for i in range(5)])
+
+    ax[0].set_xlabel('Sequence distance from ends')
+    ax[1].set_xlabel('Sequence distance from ends')
+    ax[2].set_xlabel('Sequence distance from ends')
+    ax[0].set_ylabel('Secondary structure\nprobability')
+    ax[1].set_ylabel('Structural asymmetry\n$\\log_2 (N / C)$')
+    ax[2].set_ylabel('Percentage asymmetry')
+
+
+    fs = 14
+    for i, b in zip([0,1,2], list('ABCDEFGHI')):
+        ax[i].text( -0.10, 1.05, b, transform=ax[i].transAxes, fontsize=fs)
+    fig.savefig(PATH_FIG.joinpath("si15.pdf"), bbox_inches='tight')
+
+
+def oligomer(pdb, X='REL_RATE', Y='S_ASYM', w=0.1):
+    pdb = pdb.copy()
+    fig = plt.figure(figsize=(8,8))
+    gs  = GridSpec(2,2, wspace=0.4, hspace=0.5, width_ratios=[1,1])
+    ax_all = [[fig.add_subplot(gs[j,i]) for i in [0,1]] for j in range(2)]
+
+    custom_cmap = sns.diverging_palette(230, 22, s=100, l=47, n=13)
+    c_helix = custom_cmap[2]
+    c_sheet = custom_cmap[10]
+    col = [c_helix, c_sheet]
+    bins = np.linspace(-0.20, 0.20, 80)
+    width = np.diff(bins[:2])
+    mid = 39
+    sep = 0.05
+    threshold = 0
+    lbls = [r'$E_{\beta}$', r'$E_{\alpha}$']
+    ttls = ['Monomers', 'Oligomers']
+    for ax, idx, ttl in zip(ax_all, [pdb.NPROT==1, pdb.NPROT>1], ttls):
+        quantiles = pdb.loc[idx, X].quantile(np.arange(0,1+w,w)).values
+        pdb['quant'] = pdb.loc[idx, X].apply(lambda x: utils.assign_quantile(x, quantiles))
+        for i, Y in enumerate(['S_ASYM', 'H_ASYM']):
+            ratio1 = []
+            ratio2 = []
+            lefts = []
+            rights = []
+            for j in range(len(quantiles)-1):
+                hist, bins = np.histogram(pdb.loc[(idx)&(pdb.quant==j), Y], bins=bins)
+                hist = hist / hist.sum()
+                left  = len(pdb.loc[(idx)&(pdb.quant==j)&(pdb[Y]<-threshold)]) / max(len(pdb.loc[(idx)&(pdb.quant==j)]), 1)
+                right = len(pdb.loc[(idx)&(pdb.quant==j)&(pdb[Y]>threshold)]) / max(len(pdb.loc[(idx)&(pdb.quant==j)]), 1)
+                lefts.append(left)
+                rights.append(right)
+                ratio1.append((right - left))
+                ratio2.append(np.log2(right / left))
+                xgrid = [sep*j+(i+1.0)*sep/3 for j in range(len(quantiles)-1)]
+            ax[0].barh(xgrid, ratio1, sep/3, color=col[i], alpha=.5, label=lbls[i])
+            ax[1].barh(xgrid, ratio2, sep/3, color=col[i], alpha=.5)
+            ax[0].set_xticks(np.arange(-0.3, 0.4, 0.1))
+
+        for a in ax:
+            a.set_yticks(np.arange(len(quantiles))*sep)
+            a.set_yticklabels([round(x,1) for x in quantiles])
+
+            a.plot([0,0], [-0.05, 0.5], '-', c='k', lw=.1)
+            a.spines['top'].set_visible(False)
+            a.spines['right'].set_visible(False)
+            a.set_ylim(0, 0.5)
+
+            a.set_ylabel(r'$\log_{10}R$')
+            a.set_title(f"{ttl}, N={np.sum(idx)}")
+
+        ax[0].set_xlim(-0.35, 0.35)
+        ax[1].set_xlim(-1.50, 1.50)
+
+        ax[0].set_xlabel(r'$P(\mathregular{{asym}} \geq {0}) - P(\mathregular{{asym}} \leq -{0})$'.format(*[threshold]*2))
+        ax[1].set_xlabel(r'$\log_{{2}} \frac{{P(\mathregular{{asym}} \geq {0})}}{{P(\mathregular{{asym}} \leq -{0})}} $'.format(*[threshold]*2))
+
+        ax[0].legend(loc='upper center', ncol=2, columnspacing=3, frameon=False,
+                     bbox_to_anchor=(1.20, 1.20))
+
+    fig.savefig(PATH_FIG.joinpath("si16.pdf"), bbox_inches='tight')
+    fig.savefig(PATH_FIG.joinpath("oligomers.png"), bbox_inches='tight')
+
+
+def scop2(X='REL_RATE', Y='S_ASYM', w=0.1):
+    fig, ax = plt.subplots(figsize=(10,6))
+    edges, data = pickle.load(open(PATH_FIG_DATA.joinpath("pdb_scop_indep.pickle"), 'rb'))[3:]
+    edges = edges[0]
+    sep = 0.05
+    lbls = [r'$E_{\alpha}$', r'$E_{\beta}$']
+
+    for i, Y in enumerate(['H_ASYM', 'S_ASYM']):
+        mean = np.mean(data[:,i], axis=0)
+        lo   = np.abs(mean - np.quantile(data[:,i], 0.025, axis=0))
+        hi   = np.abs(mean - np.quantile(data[:,i], 0.975, axis=0))
+        ax.barh([sep*j+(i+.7)*sep/3 for j in range(10)], mean, sep/3, xerr=(lo, hi), color=col[i], ec='k', alpha=.5, label=lbls[i], error_kw={'lw':.8})
+        ax.plot([0,0], [-0.05, 0.5], '-', c='k', lw=.1)
+
+    ax.set_yticks(np.arange(len(edges))*sep)
+    ax.set_yticklabels([round(x,1) for x in edges])
+    ax.legend(loc='upper center', ncol=2, columnspacing=3, frameon=False,
+                 bbox_to_anchor=(0.52, 1.06))
+
+    ax.set_xlim(-.38, .38)
+    ax.set_xticks(np.arange(-.3, .4, .1))
+
+
+# To create this figure, you need to download the complete
+# Human and E. coli proteomes at:
+# https://alphafold.ebi.ac.uk/download
+# and then change the code so that "base" points to the
+# folder that contains the downloaded ".pdb" files
+def disorder_proteome(N=100):
+    fig, ax = plt.subplots(1,2, figsize=(12,4))
+    lbls = ["Human", "Ecoli"]
+    ttls = ["Human", "E. coli"]
+    for i, l in enumerate(lbls):
+        path = PATH_FIG_DATA.joinpath(f"alphafold_{l}.npy")
+        if not path.exists():
+            base = PATH_BASE.joinpath(f"AlphaFold/{l}")
+            countN = np.zeros(N, float)
+            countC = np.zeros(N, float)
+            tot = np.zeros(N, float)
+            with Pool(50) as pool:
+                dis = list(pool.imap_unordered(utils.get_disorder_from_conf, base.glob("*pdb"), 10))
+                for d in dis:
+                    n = min(int(len(d)/2), N)
+                    countN[:n] = countN[:n] + d[:n]
+                    countC[:n] = countC[:n] + d[-n:][::-1]
+                    tot[:n] = tot[:n] + 1
+            fracN = countN / tot
+            fracC = countC / tot
+            np.save(path, np.array([fracN, fracC]))
+        else:
+            fracN, fracC = np.load(path)
+
+        ax[i].plot(np.arange(N)+1, fracN, '-', label='N')
+        ax[i].plot(np.arange(N)+1, fracC, '--', label='C')
+        ax[i].set_title(ttls[i])
+        ax[i].set_xlabel("Sequence distance from ends")
+        ax[i].set_ylabel("Disorder probability")
+        ax[i].set_ylim(0, 1)
+        ax[i].legend(loc='best', frameon=False)
+ 
+    fig.savefig(PATH_FIG.joinpath("si17.pdf"), bbox_inches='tight')
+
+
+def kfold_vs_ss():
+    pfdb = asym_io.load_pfdb()
+    fig, ax = plt.subplots(figsize=(8,8))
+    for c in pfdb.Class.unique():
+        X = np.log10(pfdb.loc[pfdb.Class==c, 'L'])
+        Y = pfdb.loc[pfdb.Class==c, 'log_kf']
+        sns.regplot(X, Y, label=c)
+    ax.set_xlabel(r"$\log_{10}$ Sequence Length")
+    ax.set_ylabel(r"$\log_{10} k_f$")
+    ax.legend(loc='best', frameon=False)
+
+    fig.savefig(PATH_FIG.joinpath("si18.pdf"), bbox_inches='tight')
+
+
+def hbond_asym(pdb, Xl='REL_RATE', Y='hb_asym', w=0.1):
+    fig = plt.figure(figsize=(9,6))
+    gs  = GridSpec(1,2, wspace=0.2, hspace=0.0, width_ratios=[1,.3])
+    ax = [fig.add_subplot(gs[i]) for i in [0,1]]
+
+    col = np.array(Paired_12.hex_colors)[[1,3]]
+    bins = np.linspace(-0.20, 0.20, 80)
+    width = np.diff(bins[:2])
+    X = bins[:-1] + width * 0.5
+    mid = 39
+    sep = 0.05
+    quantiles = pdb[Xl].quantile(np.arange(0,1+w,w)).values
+    ratio = []
+    lefts = []
+    rights = []
+    threshold = 0.00
+    for j in range(len(quantiles)-1):
+        hist, bins = np.histogram(pdb.loc[pdb.quant==j, Y], bins=bins)
+        hist = hist / hist.sum()
+        left  = len(pdb.loc[(pdb.quant==j)&(pdb[Y]<-threshold)]) / max(len(pdb.loc[(pdb.quant==j)]), 1)
+        right = len(pdb.loc[(pdb.quant==j)&(pdb[Y]>threshold)]) / max(len(pdb.loc[(pdb.quant==j)]), 1)
+        lefts.append(left)
+        rights.append(right)
+        ratio.append((right - left))
+        ax[0].bar(X[:mid], (hist/hist.sum())[:mid], width, bottom=[sep*j]*mid, color='grey', alpha=.5)
+        ax[0].bar(X[-mid:], (hist/hist.sum())[-mid:], width, bottom=[sep*j]*mid, color=col[0], alpha=.5)
+        ax[0].plot(X[:mid], (hist/hist.sum()+sep*j)[:mid], '-', c='k', alpha=.5)
+        ax[0].plot(X[-mid:], (hist/hist.sum()+sep*j)[-mid:], '-', c='k', alpha=.5)
+
+    ax[0].set_yticks(np.arange(len(quantiles))*sep)
+    ax[0].set_yticklabels([round(x,1) for x in quantiles])
+
+    ax[1].barh([sep*j+sep/2 for j in range(len(quantiles)-1)], ratio, sep/2, color=[col[0] if r > 0 else 'grey' for r in ratio], alpha=.5)
+    ax[1].plot([0,0], [-0.05, 0.5], '-', c='k', lw=.1)
+
+    ax[0].spines['top'].set_visible(False)
+    ax[0].spines['right'].set_visible(False)
+    ax[1].spines['top'].set_visible(False)
+    ax[1].spines['right'].set_visible(False)
+    ax[1].spines['left'].set_visible(False)
+    ax[1].set_yticks([])
+    for a in ax:
+        a.set_ylim(0, 0.60)
+
+    ax[0].set_xlabel('Asymmetry in mean hydrogen bond length')
+    ax[0].set_ylabel(r'$\log_{10}R$')
+    ax[1].set_xlabel('N terminal enrichment')
+
+    fig.savefig(PATH_FIG.joinpath("si19.pdf"), bbox_inches='tight')
+
+
+def hyd_asym(pdb, Xl='REL_RATE', Y='hyd_asym', w=0.1):
+    fig = plt.figure(figsize=(9,6))
+    gs  = GridSpec(1,2, wspace=0.2, hspace=0.0, width_ratios=[1,.3])
+    ax = [fig.add_subplot(gs[i]) for i in [0,1]]
+
+    col = np.array(Paired_12.hex_colors)[[1,3]]
+    bins = np.linspace(-4.5, 4.5, 80)
+    width = np.diff(bins[:2])
+    X = bins[:-1] + width * 0.5
+    mid = 39
+    sep = 0.05
+    quantiles = pdb[Xl].quantile(np.arange(0,1+w,w)).values
+    ratio = []
+    lefts = []
+    rights = []
+    threshold = 0.00
+    for j in range(len(quantiles)-1):
+        hist, bins = np.histogram(pdb.loc[pdb.quant==j, Y], bins=bins)
+        hist = hist / hist.sum()
+        left  = len(pdb.loc[(pdb.quant==j)&(pdb[Y]<-threshold)]) / max(len(pdb.loc[(pdb.quant==j)]), 1)
+        right = len(pdb.loc[(pdb.quant==j)&(pdb[Y]>threshold)]) / max(len(pdb.loc[(pdb.quant==j)]), 1)
+        lefts.append(left)
+        rights.append(right)
+        ratio.append((right - left))
+        ax[0].bar(X[:mid], (hist/hist.sum())[:mid], width, bottom=[sep*j]*mid, color='grey', alpha=.5)
+        ax[0].bar(X[-mid:], (hist/hist.sum())[-mid:], width, bottom=[sep*j]*mid, color=col[0], alpha=.5)
+        ax[0].plot(X[:mid], (hist/hist.sum()+sep*j)[:mid], '-', c='k', alpha=.5)
+        ax[0].plot(X[-mid:], (hist/hist.sum()+sep*j)[-mid:], '-', c='k', alpha=.5)
+
+    ax[0].set_yticks(np.arange(len(quantiles))*sep)
+    ax[0].set_yticklabels([round(x,1) for x in quantiles])
+
+    ax[1].barh([sep*j+sep/2 for j in range(len(quantiles)-1)], ratio, sep/2, color=[col[0] if r > 0 else 'grey' for r in ratio], alpha=.5)
+    ax[1].plot([0,0], [-0.05, 0.5], '-', c='k', lw=.1)
+
+    ax[0].spines['top'].set_visible(False)
+    ax[0].spines['right'].set_visible(False)
+    ax[1].spines['top'].set_visible(False)
+    ax[1].spines['right'].set_visible(False)
+    ax[1].spines['left'].set_visible(False)
+    ax[1].set_yticks([])
+    for a in ax:
+        a.set_ylim(0, 0.60)
+
+    ax[0].set_xlabel('Asymmetry in mean hydrophobicity')
+    ax[0].set_ylabel(r'$\log_{10}R$')
+    ax[1].set_xlabel('N terminal enrichment')
+
+    fig.savefig(PATH_FIG.joinpath("si20.pdf"), bbox_inches='tight')
 
 

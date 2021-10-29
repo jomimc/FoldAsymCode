@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
 import os
 
@@ -60,6 +60,25 @@ def evaluate_scop_prob(df, idx, cut=10, cat='CF'):
             except:
                 ratio3 = np.nan
             print(k, f"  {v:<5d}  {scop_desc[int(k)][:40]:40s}  {ratio1:10.2f}  {ratio2:10.2f}  {ratio3:10.2f}")
+
+
+def get_SCOP_redundant_list(pdb):
+    used = set()
+    idx = []
+    for i, fa in zip(pdb.index, pdb.FA):
+        if fa == '' or fa in used:
+            continue
+        used.add(fa)
+        idx.append(i)
+    return idx
+
+
+def get_SCOP_redundant_key(pdb, k='FA'):
+    used = set()
+    key = defaultdict(list)
+    for i, fa in zip(pdb.index, pdb[k]):
+        key[fa].append(i)
+    return key
 
 
 

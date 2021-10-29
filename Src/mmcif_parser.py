@@ -25,6 +25,34 @@ def load_mmcif(pdb_id, reformat=True):
     return asym_io.load_mmcif(pdb_id, reformat=reformat)
 
 
+def extract_contents_summary(mmcif):
+    try:
+        desc_poly = pd.DataFrame(mmcif['_entity_poly'])
+    except:
+        desc_poly = pd.DataFrame([mmcif['_entity_poly']])
+    poly_key = {e_id: typ for e_id, typ in zip(*desc_poly.loc[:, ['entity_id', 'type']].values.T)}
+    chain_key = {e_id: typ for e_id, typ in zip(*desc_poly.loc[:, ['entity_id', 'pdbx_strand_id']].values.T)}
+
+    desc_lbls = ['id', 'type', 'pdbx_description']
+
+    try:
+        df = pd.DataFrame(mmcif['_entity'])
+    except:
+        df = pd.DataFrame([mmcif['_entity']])
+
+    data = {}
+    for i, typ, desc in zip(*df.loc[:, desc_lbls].values.T):
+        if typ == 'polymer':
+            data[i] = {'entity_id':i, 'type':typ, 'desc':desc, 'polytype':poly_key[i], 'chain':chain_key[i]}
+        else:
+            data[i] = {'entity_id':i, 'type':typ, 'desc':desc}
+    return data
+
+
+def extract_method(mmcif):
+    return mmcif['_exptl']['method']
+
+
 def extract_date(mmcif):
     fmt = "%Y-%m-%d"
     try:
@@ -95,7 +123,11 @@ def extract_sheets(mmcif, chain='', all_col=False):
 
 def match_entity_id_chain(mmcif):
     d = mmcif['_entity_poly']
-    return {chain: entity for chain, entity in zip(d['pdbx_strand_id'], d['entity_id'])}
+    out = {}
+    for chain, entity in zip(d['pdbx_strand_id'], d['entity_id']):
+        for c in chain.split(','):
+            out[c] = entity
+    return out
 
 
 def match_asym_id_chain(ref):

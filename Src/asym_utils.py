@@ -1,10 +1,15 @@
 from collections import Counter, defaultdict
+import os
+import pickle
 
 import Levenshtein
 import numpy as np
 import statsmodels.nonparametric.api as smnp
 
+from asym_io import PATH_BASE
+
 AA_ALPHA = np.array(list("ACDEFGHILKMNPQRSTVYW"))
+HYDRO = pickle.load(open(os.path.join(PATH_BASE, 'hydrophobicity.pickle'), 'rb'))[1]['hydropathy']
 
 def smooth_dist_kde(Xgrid, Xobs):
     kde = smnp.KDEUnivariate(np.array(Xobs))
@@ -179,11 +184,12 @@ def calculate_enrichment(inputs):
     # For Fig3C, we want to make sure that the quantiles are the same,
     # so they must be specified to be the same as in Fig3A-B
     # This is only used when getting seperate Eukaryote/Prokaryote data
-    if q:
+    if isinstance(q, np.ndarray):
         # Use this one if ln_kf is predicted based on PFDB
 #       quantiles = np.array([-8. , -2.6, -2. , -1.5, -1. , -0.6, -0.3,  0. ,  0.4,  0.8,  5.6])
         # Use this one if ln_kf is predicted based on ACPro
-        quantiles = np.array([-6.3, -3. , -2.7, -2.4, -2.1, -1.8, -1.7, -1.5, -1.2, -1. ,  1.7])
+#       quantiles = np.array([-6.3, -3. , -2.7, -2.4, -2.1, -1.8, -1.7, -1.5, -1.2, -1. ,  1.7])
+        quantiles = q.copy()
     else:
         quantiles = pdb['REL_RATE'].quantile(np.arange(0,1.1,.1)).values
     pdb['quant'] = pdb['REL_RATE'].apply(lambda x: assign_quantile(x, quantiles))
@@ -233,8 +239,38 @@ def R_frac_2(df, k=0, cut1=-1, cut2=1):
         return len(df.loc[(df.REL_RATE>=cut1)&(df.REL_RATE<=cut2)]) / max(1, len(df))
 
 
+# Fraction of proteins that fold faster than 'speed limit'
+def R_frac_3(df, k=0):
+    if k:
+        return len(df.loc[(10**-df.ln_kf < df.AA * 10**-8)&(df.k_trans==k)]) / max(1, len(df.loc[df.k_trans==k]))
+    else:
+        return len(df.loc[(10**-df.ln_kf < df.AA * 10**-8)]) / max(1, len(df))
 
 
+# Fraction of proteins that do not fold within 20 minutes'
+def R_frac_4(df, k=0, cut1=1200):
+    if k:
+        return len(df.loc[(10**-df.ln_kf>cut1)&(df.k_trans==k)]) / max(1, len(df.loc[df.k_trans==k]))
+    else:
+        return len(df.loc[(10**-df.ln_kf>cut1)]) / max(1, len(df))
+
+
+# Get prediction confidence per residue from AlphaFold .pdb files
+def get_disorder_from_conf(path, cut=70):
+    disorder = []
+    res = set()
+    for l in open(path, 'r'):
+        if l[:4] == 'ATOM':
+            r = int(l[22:26])
+            if r not in res:
+                res.add(r)
+                conf = float(l[61:66])
+                disorder.append(conf < cut)
+    return np.array(disorder)
+
+
+def get_hydro(seq):
+    return np.array([HYDRO.get(s,0) for s in seq])
 
 
 

@@ -38,11 +38,11 @@ PATH_FIG_DATA = PATH_FIG.joinpath("Data")
 
 def fig1(pdb):
     fig = plt.figure(figsize=(11, 10))
-    gs  = GridSpec(5,48, wspace=1.0, hspace=0.0, height_ratios=[1,0.3,1,0.6,1.5])
+    gs  = GridSpec(5,48, wspace=1.0, hspace=0.0, height_ratios=[1,0.3,1,0.8,1.8])
     ax = [fig.add_subplot(gs[i*2,:14]) for i in [0,1]] + \
          [fig.add_subplot(gs[i*2,17:31]) for i in [0,1]] + \
          [fig.add_subplot(gs[i*2,34:]) for i in [0,1]] + \
-         [fig.add_subplot(gs[3:,i:i+j]) for i,j in zip([0,18,36],[12,12,12])]
+         [fig.add_subplot(gs[3:,i:i+j]) for i,j in zip([3,27],[15,15])]
 
     custom_cmap = sns.diverging_palette(230, 22, s=100, l=47, n=13)
     c_helix = custom_cmap[2]
@@ -62,17 +62,21 @@ def fig1(pdb):
             ax[i*2].plot(X, data[1][s]['mean']/2, '--', c=col[j], label=f"{s} N")
             ax[i*2].fill_between(X, data[1][s]['hi']/2, data[1][s]['lo']/2, color="grey", label=f"{s} N", alpha=0.2)
 
-            print(i, s, round(np.mean(data[2][s]['mean']), 2), round(np.mean(data[2][s]['mean'][:20]), 2))
+            print(i, s, round(np.mean(data[2][s]['mean']), 2), round(np.mean(data[2][s]['mean'][:20]), 2), round(np.mean(data[2][s]['mean'][20:40]), 2))
 
             ax[i*2+1].plot(X, np.log2(data[2][s]['mean']), '-', c=col[j], label=lbls[j])
             ax[i*2+1].fill_between(X, np.log2(data[2][s]['hi']), np.log2(data[2][s]['lo']), color="grey", label=f"{s} N", alpha=0.2)
+#           Y = [[y*100-100 if y >= 1 else -((1/y)*100-100) for y in data[2][s][p]] for p in ['mean', 'lo', 'hi']]
+#           ax[i*2+1].plot(X, Y[0], '-', c=col[j], label=lbls[j])
+#           ax[i*2+1].fill_between(X, Y[1], Y[2], color="grey", label=f"{s} N", alpha=0.2)
 
     for i in range(3):
         ax[i*2].set_title(ttls[i])
+        ax[i*2].set_ylim(0, 0.6)
+#       ax[i*2+1].set_ylim(-100, 130)
         ax[i*2+1].set_ylim(-1, 1.3)
         ax[i*2+1].plot([0]*50, '-', c='k')
-        ax[i*2+1].set_yticks(np.arange(-1,1.5,0.5))
-        ax[i*2].set_ylim(0, 0.6)
+#       ax[i*2+1].set_yticks(np.arange(-1,1.5,0.5))
 
 #   ax[0].plot(X, (X+1)**-0.78, '-k')
 #   ax[2].plot(X, (X+1)**-0.5, '-k')
@@ -96,7 +100,7 @@ def fig1(pdb):
     fig1b(pdb, ax=ax[6:], fig=fig)
 
     fs = 14
-    for i, b in zip([0,1,6,7,8], list('ABCDEFGHI')):
+    for i, b in zip([0,1,6,7], list('ABCDEFGHI')):
         ax[i].text( -0.20, 1.10, b, transform=ax[i].transAxes, fontsize=fs)
     for a in ax:
         a.tick_params(axis='both', which='major', direction='in')
@@ -105,7 +109,7 @@ def fig1(pdb):
 
 
 def ss_by_seq(pdb, cat='SH.D'):
-    countN, countC = utils.pdb_end_stats_disorder_N_C(pdb, N=50, s1='SEQ_PDB', s2='SS_PDB')
+    countN, countC = utils.pdb_end_stats_disorder_N_C(pdb, N=50, s1='SEQ_PDB2', s2='SS_PDB2')
     base = np.zeros(len(countN['S']), dtype=float)
     Yt = np.array([[sum(p.values()) for p in countN[s]] for s in cat]).sum(axis=0)
     X = np.arange(base.size)
@@ -117,7 +121,7 @@ def ss_by_seq(pdb, cat='SH.D'):
     return out_dict
 
 
-def fig1b(df, X='AA', Y='CO', w=.1, ax='', fig=''):
+def fig1b(df, X='AA_PDB', Y='CO', w=.1, ax='', fig=''):
     if isinstance(ax, str):
         fig, ax = plt.subplots(1,3, figsize=(15,4))
         fig.subplots_adjust(wspace=0.5)
@@ -126,8 +130,8 @@ def fig1b(df, X='AA', Y='CO', w=.1, ax='', fig=''):
     quant1 = [df[X].min()] + list(df[X].quantile(q).values)
     quant2 = [df[Y].min()] + list(df[Y].quantile(q).values)
     lbls = ['Helix', 'Sheet']
-    cb_lbl = [r"$E_{\alpha}$", r"$E_{\beta}$"]
-    vmax = 0.50
+    cb_lbl = [r"$asym_{\alpha}$", r"$asym_{\beta}$"]
+    vmax = 0.03
     vmin = -vmax
 
     count = []
@@ -137,21 +141,22 @@ def fig1b(df, X='AA', Y='CO', w=.1, ax='', fig=''):
         for l1, h1 in zip(quant1[:-1], quant1[1:]):
             for l2, h2 in zip(quant2[:-1], quant2[1:]):
                 samp = df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2), Z]
-#               mean.append(samp.mean())
-                left  = len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)&(df[Z]<0)])
-                right = len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)&(df[Z]>0)])
-                tot = max(len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)]), 1)
-                mean.append((right - left)/tot)
+                mean.append(samp.mean())
+#               left  = len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)&(df[Z]<0)])
+#               right = len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)&(df[Z]>0)])
+#               tot = max(len(df.loc[(df[X]>=l1)&(df[X]<h1)&(df[Y]>=l2)&(df[Y]<h2)]), 1)
+#               mean.append((right - left)/tot)
                 if not i:
                     count.append(len(samp))
 #                   print(len(samp))
+        mean = np.array(mean).reshape(q.size, q.size)
+        count = np.array(count).reshape(q.size, q.size)
+        mean[count<20] = 0
 
-#       cmap = plt.cm.RdBu
-#       cmap = sns.diverging_palette(230, 25, s=98, l=55, as_cmap=True)
         cmap = sns.diverging_palette(230, 22, s=100, l=47, as_cmap=True)
         norm = colors.BoundaryNorm([vmin, vmax], cmap.N)
         bounds = np.linspace(vmin, vmax, 3)
-        im = ax[i].imshow(np.array(mean).reshape(q.size, q.size).T, cmap=cmap, vmin=vmin, vmax=vmax)
+        im = ax[i].imshow(mean.T, cmap=cmap, vmin=vmin, vmax=vmax)
         cbar = fig.colorbar(im, cmap=cmap, ticks=bounds, ax=ax[i], fraction=0.046, pad=0.04)
 
         cbar.set_label(cb_lbl[i], labelpad=-5)
@@ -161,19 +166,19 @@ def fig1b(df, X='AA', Y='CO', w=.1, ax='', fig=''):
         ax[i].set_xticklabels([int(x) for x in quant1], rotation=90)
         ax[i].set_yticklabels([int(round(x,0)) for x in quant2])
 
-    for i in [2]:
-        cmap = plt.cm.Greys
+#   for i in [2]:
+#       cmap = plt.cm.Greys
 #       norm = colors.BoundaryNorm([-.04, .04], cmap.N)
 #       bounds = np.linspace(-.04, .04, 5)
-        im = ax[i].imshow(np.array(count).reshape(q.size, q.size).T, cmap=cmap, vmin=0)
-        cbar = fig.colorbar(im, cmap=cmap, ax=ax[i], fraction=0.046, pad=0.04)
+#       im = ax[i].imshow(np.array(count).reshape(q.size, q.size).T, cmap=cmap, vmin=0)
+#       cbar = fig.colorbar(im, cmap=cmap, ax=ax[i], fraction=0.046, pad=0.04)
 
-        cbar.set_label('Count')
-        ax[i].set_title('Distribution')
-        ax[i].set_xticks(np.arange(q.size+1)-0.5)
-        ax[i].set_yticks(np.arange(q.size+1)-0.5)
-        ax[i].set_xticklabels([int(x) for x in quant1], rotation=90)
-        ax[i].set_yticklabels([int(round(x,0)) for x in quant2])
+#       cbar.set_label('Count')
+#       ax[i].set_title('Distribution')
+#       ax[i].set_xticks(np.arange(q.size+1)-0.5)
+#       ax[i].set_yticks(np.arange(q.size+1)-0.5)
+#       ax[i].set_xticklabels([int(x) for x in quant1], rotation=90)
+#       ax[i].set_yticklabels([int(round(x,0)) for x in quant2])
 
     for a in ax:
         a.invert_yaxis()
@@ -201,14 +206,14 @@ def fig2():
         fig2b(fig, ax[0])
         fig2d(fig, ax[1])
 
-        for i, b in enumerate('BD'):
+        for i, b in enumerate('BC'):
             ax[i].text( -0.28, 1.08, b, transform=ax[i].transAxes, fontsize=fs)
         fig.savefig(PATH_FIG.joinpath("fig1_bottom.svg"), bbox_inches='tight')
     
 
-    sc.Figure("14.8cm", "7.50cm", 
-        sc.Panel(sc.SVG(PATH_FIG.joinpath("fig1_dia_ver2.svg")).scale(1.400).move(5,0)),
-        sc.Panel(sc.SVG(PATH_FIG.joinpath("fig1_bottom.svg")).scale(0.700).move(390,0))
+    sc.Figure("16.0cm", "7.50cm", 
+        sc.Panel(sc.SVG(PATH_FIG.joinpath("fig1_dia_ver3.svg")).scale(1.400).move(5,0)),
+        sc.Panel(sc.SVG(PATH_FIG.joinpath("fig1_bottom.svg")).scale(0.700).move(435,0))
         ).save(PATH_FIG.joinpath("fig1.svg"))
 
 
@@ -238,9 +243,9 @@ def fig2b(fig, ax):
 def fig2d(fig, ax):
     X = np.arange(-3, 3, 0.01)
     Y = np.array([(10**x + 1)/max(10**x, 1) for x in X])
-    Y2 = (1+10**X) / np.array([max(1, 10**x+0.3) for x in X]) 
-    ax.plot(X, Y, '-', label=r"$\tau_{\mathregular{ribo}}=0$")
-    ax.plot(X, Y2, ':', label=r"$\tau_{\mathregular{ribo}}=0.3\tau_{\mathregular{trans}}$")
+    Y2 = (1+10**X) / np.array([max(1, 10**x+0.5) for x in X]) 
+    ax.plot(X, Y, '-', label=r"$\tau_{\mathregular{onset}}=0$")
+    ax.plot(X, Y2, ':', label=r"$\tau_{\mathregular{onset}}=0.5\tau_{\mathregular{trans}}$")
 
     ax.set_xlim(-2.3, 2.3)
     ax.set_ylim(1, 2.05)
@@ -333,9 +338,7 @@ def fig3(pdb, Y='S_ASYM'):
 
 
     pdb = pdb.loc[pdb.OC!='Viruses']
-    X = np.arange(10)
     X = np.array([sep*j+(i+.7)*sep/3 for j in range(10)])
-    width = .175
     ttls = ['Eukaryote ', 'Prokaryote ']
     lbls = [r'$E_{\alpha}$', r'$E_{\beta}$']
     custom_cmap = sns.diverging_palette(230, 22, s=100, l=47, n=13)
@@ -345,7 +348,6 @@ def fig3(pdb, Y='S_ASYM'):
     for i, path in enumerate(paths):
         enrich_data = pickle.load(open(PATH_FIG_DATA.joinpath(path), 'rb'))
         for j, Y in enumerate(['H_ASYM', 'S_ASYM']):
-#           adjust = (j - 1 + i*2)*width
             adjust = (j*2 - 4.0 + i)*(sep/5)
             mean = np.mean(enrich_data[Y[0]], axis=0)
             lo   = np.abs(mean - np.quantile(enrich_data[Y[0]], 0.025, axis=0))
@@ -371,8 +373,9 @@ def fig3(pdb, Y='S_ASYM'):
     ax[3].yaxis.tick_right()
 
     fs = 14
-    for i, b in zip([0,2,3], list('ABCDEFGHI')):
+    for i, b in zip([0,2], list('ABCDEFGHI')):
         ax[i].text( -0.20, 1.08, b, transform=ax[i].transAxes, fontsize=fs)
+    ax[3].text( -0.10, 1.08, 'C', transform=ax[3].transAxes, fontsize=fs)
 
     fig.savefig(PATH_FIG.joinpath("fig3.pdf"), bbox_inches='tight')
 
@@ -383,11 +386,18 @@ def fig3(pdb, Y='S_ASYM'):
 ### FIG 4
 
 def fig4(dom, Y='S_ASYM'):
-    fig = plt.figure(figsize=(4.7,4.9))
-    gs  = GridSpec(5,1, wspace=0.00, hspace=0.0,
-                   height_ratios=[.45, .5, .45, .5, .8])# .8, .3, 1])
-    ax = [fig.add_subplot(gs[i*2,0]) for i in range(2)] + \
-         [fig.add_subplot(gs[4,0])] 
+#   fig = plt.figure(figsize=(4.7,4.9))
+#   gs  = GridSpec(5,1, wspace=0.00, hspace=0.0,
+#                  height_ratios=[.45, .5, .45, .5, .8])# .8, .3, 1])
+#   ax = [fig.add_subplot(gs[i*2,0]) for i in range(2)] + \
+#        [fig.add_subplot(gs[4,0])] 
+#   ax = np.array(ax)
+    fig = plt.figure(figsize=(4.7,5.9))
+    gs  = GridSpec(3,3, wspace=0.00, hspace=0.0, width_ratios=[1, 0.5, 1],
+                   height_ratios=[1.0, 0.3, 0.7])# .8, .3, 1])
+    ax = [fig.add_subplot(gs[0,i*2]) for i in range(2)] + \
+         [fig.add_subplot(gs[2,i*2]) for i in range(2)] 
+#        [fig.add_subplot(gs[2,:])] 
     ax = np.array(ax)
     ft = 14
 
@@ -422,30 +432,38 @@ def fig4(dom, Y='S_ASYM'):
             mean = np.mean(enrich_data[Y[0]], axis=0)
             lo   = np.abs(mean - np.quantile(enrich_data[Y[0]], 0.025, axis=0))
             hi   = np.abs(mean - np.quantile(enrich_data[Y[0]], 0.975, axis=0))
-            ax[i].bar(X+adjust, mean, width, ec='k', yerr=(lo, hi), color=col[j], label=lbls[j], alpha=.5, error_kw={'lw':.8})
-        ax[i].set_xticks(np.arange(len(quantiles))-0.5)
-        ax[i].set_yticks(np.arange(-.3, .4, .3))
-        ax[i].set_ylabel('N terminal   \nEnrichment   ', labelpad=0, fontsize=ft-4)
-        ax[i].set_xlabel(r'$\log_{10} R$', fontsize=ft-4)
-        ax[i].set_xticklabels([round(x,1) for x in quantiles], rotation=90)
+            ax[i].barh(X+adjust, mean, width, ec='k', xerr=(lo, hi), color=col[j], label=lbls[j], alpha=.5, error_kw={'lw':.8})
+        ax[i].set_yticks(np.arange(len(quantiles))-0.5)
+        ax[i].set_xticks(np.arange(-.3, .4, .3))
+        ax[i].set_xlabel('N terminal   \nEnrichment   ', labelpad=0, fontsize=ft-4)
+        ax[i].set_ylabel(r'$\log_{10} R$', fontsize=ft-4)
+        ax[i].set_yticklabels([round(x,1) for x in quantiles])
         ax[i].set_title(ttls[i], loc='left')
     for a in ax[:2]:
-        a.set_ylim(-.33, .40)
-    ax[1].legend(loc='upper right', bbox_to_anchor=(1.00,1.75), frameon=False)
+        a.set_xlim(-.33, .40)
+    ax[0].legend(loc='upper right', bbox_to_anchor=(1.38,1.25), frameon=False)
 
 
-    sns.boxplot(y='CO', x='NDOM', data=dom.loc[dom.NDOM<6], ax=ax[2], showfliers=False,
+    sns.boxplot(y='AA', x='NDOM', data=dom.loc[dom.NDOM<6], ax=ax[2], showfliers=False,
                 color=(0.8, 0.8, 0.8))
-    ax[2].set_xlabel("Number of domains", fontsize=ft-4)
-    ax[2].set_ylabel("Contact Order", fontsize=ft-4)
-    plt.setp(ax[2].artists, edgecolor=[.3]*3, facecolor=[.8]*3, lw=1.3)
-    plt.setp(ax[2].lines, color=[.3]*3, lw=0.5)
+    sns.boxplot(y='CO', x='NDOM', data=dom.loc[dom.NDOM<6], ax=ax[3], showfliers=False,
+                color=(0.8, 0.8, 0.8))
+#   sns.boxplot(y='CO', x='CO', data=dom.loc[dom.NDOM<6], ax=ax[2], 
+#               color=(0.8, 0.8, 0.8))
+#   sns.boxplot(y='NDOM', x='AA_PDB', data=dom.loc[dom.NDOM<6], ax=ax[3],
+#               color=(0.8, 0.8, 0.8))
+    ax[2].set_ylabel("Sequence Length", fontsize=ft-4)
+    ax[3].set_ylabel("Contact Order", fontsize=ft-4)
+    for a in ax[2:]:
+        a.set_xlabel("Number of domains", fontsize=ft-4)
+        plt.setp(a.artists, edgecolor=[.3]*3, facecolor=[.8]*3, lw=1.3)
+        plt.setp(a.lines, color=[.3]*3, lw=0.5)
 
 
     
-    top = [1.00] + [1.20]*2
-    bot = [-.19] + [-.20]*2
-    for i, (a, b) in enumerate(zip(ax[[2,0,1]], list('DBCFGH'))):
+    top = [1.20]*2 + [1.00]*2
+    bot = [-.20]*2 + [-.19]*2
+    for i, (a, b) in enumerate(zip(ax, list('BCDEFG'))):
         a.spines['top'].set_visible(False)
         a.spines['right'].set_visible(False)
         a.text(bot[i], top[i], b, transform=a.transAxes, fontsize=ft+2)
@@ -454,8 +472,8 @@ def fig4(dom, Y='S_ASYM'):
     fig.savefig(PATH_FIG.joinpath("fig3_bottom.svg"), bbox_inches='tight')
     
 
-    sc.Figure("8.05cm", "10.65cm", 
-        sc.Panel(sc.SVG(PATH_FIG.joinpath("fig3_bottom.svg")).scale(0.930).move(000,100)),
+    sc.Figure("8.05cm", "13.10cm", 
+        sc.Panel(sc.SVG(PATH_FIG.joinpath("fig3_bottom.svg")).scale(0.970).move(000,100)),
         sc.Panel(sc.SVG(PATH_FIG.joinpath("fig3_dia.svg")).scale(1.200).move(5,00))
         ).save(PATH_FIG.joinpath("fig3.svg"))
 
@@ -467,7 +485,7 @@ def fig4(dom, Y='S_ASYM'):
 
 def circ_perm(df_pdb):
     fig, ax = plt.subplots(figsize=(6,2))
-    SS = df_pdb.loc[1834, 'SS_PDB']
+    SS = df_pdb.loc[1834, 'SS_PDB2']
     ss_var = [utils.circ_perm(SS, 67), SS]
     lbls = ['1ASK-CP67', '1ASK']
     custom_cmap = sns.diverging_palette(230, 22, s=100, l=47, n=13)
@@ -491,6 +509,9 @@ def circ_perm(df_pdb):
     ax.set_yticks(range(2))
     ax.set_yticklabels(lbls)
     ax.tick_params(axis='y', which='major', length=0, pad=10)
+    ax.annotate("N", xy=(-0.00, 1.0), xycoords='axes fraction')
+    ax.annotate("C", xy=(0.93, 1.0), xycoords='axes fraction')
+
 
     fig.savefig(PATH_FIG.joinpath("fig5.pdf"), bbox_inches='tight')
 

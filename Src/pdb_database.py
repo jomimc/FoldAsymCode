@@ -208,6 +208,15 @@ def get_contact_order(config_list):
     return CO
 
 
+def get_hydrophobicity_asymmetry(nonred):
+    with Pool(N_PROC) as pool:
+        hyd = list(pool.map(get_hydro, pdb.SEQ_PDB2, 10))
+    N = np.array([np.mean(h[:int(len(h)/2)]) for h in hyd])
+    C = np.array([np.mean(h[-int(len(h)/2):]) for h in hyd])
+    nonred['hyd_asym'] = N - C
+    return nonred
+
+
 def get_nonredunant_proteins(df):
     nonred = df.loc[(df.LATEST)&(df.SIG!=True)&(df.SEQ_DIST==0)]
     seq_idx = defaultdict(dict)
@@ -281,20 +290,29 @@ def construct_pdb_database():
     # Add some more structural features (contact order, relative surface accessibility)
     nonred['CO'] = get_contact_order(config_list_trimmed[nonred.index])
     nonred['RSA'] = structure.rsa_fill_in_disorder_all(nonred, structure.get_rsa_all(nonred))
+
     # A few chains could not be automatically aligned for various reasons.
     # I just ignore these chains (about 40)
     nonred['USE_RSA'] = nonred.RSA.apply(lambda x: len(x) > 0)
     clusters = structure.cluster_proteins_by_ss(nonred)
     nonred['cl_12'] = clusters[10]
-    nonred = match_scop_key_with_pdb(nonred)
+    nonred = scop.match_scop_key_with_pdb(nonred)
 
+    # Calculate the mean sequence distance between residues that share a hydrogen bond,
+    # and then get the asymmetry between the N and C termini
+    Nhb, Chb, NChb = structure.run_hbond_analyses(nonred)[2].T
+    nonred['hb_asym'] = (Nhb - Chb) / nonred.AA_PDB2.values
+
+    # Not technically structural information, but we calculate the hydrophobicity,
+    # and then get the asymmetry between the N and C termini
+    nonred = get_hydrophobicity_asymmetry(nonred) 
 
     #-----------------------------------------------------------------#
     ### Create a non-redundant set of domains
 
     # Match PFAM domains
     df = pfam.match_pdb_to_pfam(df)
-    dom = get_nonredundant_pdb_domain(df)
+    dom = pfam.get_nonredundant_pdb_domain(df)
     dom = pfam.get_domain_contact_order(dom)
 
 
